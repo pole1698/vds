@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Football Tactics Board</title>
+  <style>
+    body { margin: 0; background: #fff; }
+    canvas { touch-action: none; display: block; margin: auto; background: white; }
+    #clearBtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 16px;
+      background: #ddd;
+      border: 2px solid black;
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+      z-index: 10;
+      border-radius: 4px;
+    }
+    #clearBtn:hover {
+      background: #bbb;
+    }
+  </style>
+</head>
+<body>
+<button id="clearBtn">Pfeile löschen</button>
+<canvas id="board" width="500" height="800"></canvas>
+
+<script>
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
+
+let players = [];
+let dragging = null;
+let arrows = [];
+let currentArrow = null;
+
+// Player Labels
+const redLabels = ["TW", "LV", "IV", "IV", "RV", "LM", "ZM", "ZM", "RM", "ST", "ST"];
+
+// Create players
+function initPlayers() {
+  players = [];
+
+  // Red team (bottom)
+  for (let i = 0; i < 11; i++) {
+    players.push({
+      x: WIDTH / 4,
+      y: HEIGHT / 4 + i * (HEIGHT - 200) / 22,
+      color: "red",
+      label: redLabels[i]
+    });
+  }
+
+  // Green team (top)
+  for (let i = 0; i < 11; i++) {
+    players.push({
+      x: 3 * WIDTH / 4,
+      y: HEIGHT * 3 / 4 - i * (HEIGHT - 200) / 22,
+      color: "green"
+    });
+  }
+
+  // Ball
+  players.push({
+    x: WIDTH / 2,
+    y: HEIGHT / 2,
+    color: "black",
+    ball: true
+  });
+}
+
+initPlayers();
+
+function getPlayersByLabels(targetLabels) {
+  return players.filter(p => p.label && targetLabels.includes(p.label));
+}
+
+function drawConnectionLine(labelList) {
+  const positions = getPlayersByLabels(labelList).map(p => [p.x, p.y]);
+  if (positions.length >= 2) {
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(positions[0][0], positions[0][1]);
+    for (let i = 1; i < positions.length; i++) {
+      ctx.lineTo(positions[i][0], positions[i][1]);
+    }
+    ctx.stroke();
+  }
+}
+
+function drawField() {
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "black";
+
+  // Outer lines
+  ctx.strokeRect(30, 30, WIDTH - 60, HEIGHT - 60);
+
+  // Midline
+  ctx.beginPath();
+  ctx.moveTo(30, HEIGHT / 2);
+  ctx.lineTo(WIDTH - 30, HEIGHT / 2);
+  ctx.stroke();
+
+  // Center circle
+  ctx.beginPath();
+  ctx.arc(WIDTH / 2, HEIGHT / 2, 60, 0, 2 * Math.PI);
+  ctx.stroke();
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(WIDTH / 2, HEIGHT / 2, 5, 0, 2 * Math.PI);
+  ctx.fill();
+
+  // Penalty & goal areas
+  drawBox(180, 60); // penalty
+  drawBox(80, 20);  // goal
+
+  // Draw connection lines
+  drawConnectionLine(["ST", "ST"]);
+  drawConnectionLine(["LM", "ZM", "ZM", "RM"]);
+  drawConnectionLine(["LV", "IV", "IV", "RV"]);
+}
+
+function drawBox(boxWidth, boxHeight) {
+  // Bottom
+  ctx.strokeRect(WIDTH/2 - boxWidth/2, HEIGHT - 30 - boxHeight, boxWidth, boxHeight);
+  // Top
+  ctx.strokeRect(WIDTH/2 - boxWidth/2, 30, boxWidth, boxHeight);
+}
+
+function drawPlayers() {
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold 12px sans-serif";
+
+  players.forEach((p, i) => {
+    ctx.beginPath();
+    ctx.fillStyle = p.color;
+    const r = p.ball ? 8 : 15;
+    ctx.arc(p.x, p.y, r, 0, 2 * Math.PI);
+    ctx.fill();
+
+    if (p.color === "red" && !p.ball) {
+      ctx.fillStyle = "black";
+      ctx.fillText(p.label, p.x, p.y);
+    }
+  });
+}
+
+function drawArrows() {
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+
+  arrows.forEach(([start, end]) => {
+    drawArrow(start, end);
+  });
+
+  if (currentArrow) {
+    drawArrow(currentArrow[0], currentArrow[1]);
+  }
+}
+
+function drawArrow(start, end) {
+  const [x1, y1] = start;
+  const [x2, y2] = end;
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+
+  // Arrowhead
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const size = 10;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - size * Math.cos(angle - 0.5), y2 - size * Math.sin(angle - 0.5));
+  ctx.lineTo(x2 - size * Math.cos(angle + 0.5), y2 - size * Math.sin(angle + 0.5));
+  ctx.lineTo(x2, y2);
+  ctx.fill();
+}
+
+function render() {
+  drawField();
+  drawArrows();
+  drawPlayers();
+  requestAnimationFrame(render);
+}
+
+canvas.addEventListener("pointerdown", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  // Try to drag player
+  for (let i = players.length - 1; i >= 0; i--) {
+    const p = players[i];
+    const r = p.ball ? 8 : 15;
+    if ((x - p.x)**2 + (y - p.y)**2 <= r**2) {
+      dragging = { index: i, offsetX: x - p.x, offsetY: y - p.y };
+      return;
+    }
+  }
+
+  // Else start arrow
+  currentArrow = [[x, y], [x, y]];
+});
+
+canvas.addEventListener("pointermove", (e) => {
+  if (dragging) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const p = players[dragging.index];
+    p.x = x - dragging.offsetX;
+    p.y = y - dragging.offsetY;
+  } else if (currentArrow) {
+    const rect = canvas.getBoundingClientRect();
+    currentArrow[1] = [e.clientX - rect.left, e.clientY - rect.top];
+  }
+});
+
+canvas.addEventListener("pointerup", () => {
+  if (currentArrow && (currentArrow[0][0] !== currentArrow[1][0] || currentArrow[0][1] !== currentArrow[1][1])) {
+    arrows.push(currentArrow);
+  }
+  dragging = null;
+  currentArrow = null;
+});
+
+// Button zum Löschen der Pfeile
+const clearBtn = document.getElementById("clearBtn");
+clearBtn.addEventListener("click", () => {
+  arrows = [];
+});
+
+render();
+</script>
+</body>
+</html>
